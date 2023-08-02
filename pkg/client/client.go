@@ -42,6 +42,7 @@ type AuthOpts struct {
 	UserID           string                   `gcfg:"user-id" mapstructure:"user-id" name:"os-userID" value:"optional" dependsOn:"os-password"`
 	Username         string                   `name:"os-userName" value:"optional" dependsOn:"os-password"`
 	Password         string                   `name:"os-password" value:"optional" dependsOn:"os-domainID|os-domainName,os-projectID|os-projectName,os-userID|os-userName"`
+	APIKey           string                   `gcfg:"api-key" value:"optional" dependsOn:"auth-url,tenant-id"`
 	TenantID         string                   `gcfg:"tenant-id" mapstructure:"project-id" name:"os-projectID" value:"optional" dependsOn:"os-password|os-clientCertPath"`
 	TenantName       string                   `gcfg:"tenant-name" mapstructure:"project-name" name:"os-projectName" value:"optional" dependsOn:"os-password|os-clientCertPath"`
 	TrustID          string                   `gcfg:"trust-id" mapstructure:"trust-id" name:"os-trustID" value:"optional"`
@@ -131,6 +132,12 @@ func (l Logger) Printf(format string, args ...interface{}) {
 }
 
 func (authOpts AuthOpts) ToAuthOptions() gophercloud.AuthOptions {
+	var customCredential string = ""
+	if authOpts.APIKey != "" {
+		customCredential = fmt.Sprintf(`{"RAX-KSKEY:apiKeyCredentials":{"username":"%s","apiKey":"%s"}}`,
+			authOpts.Username, authOpts.APIKey)
+	}
+
 	opts := clientconfig.ClientOpts{
 		// this is needed to disable the clientconfig.AuthOptions func env detection
 		EnvPrefix: "_",
@@ -140,6 +147,7 @@ func (authOpts AuthOpts) ToAuthOptions() gophercloud.AuthOptions {
 			UserID:                      authOpts.UserID,
 			Username:                    authOpts.Username,
 			Password:                    authOpts.Password,
+			CustomCredential:            customCredential,
 			ProjectID:                   authOpts.TenantID,
 			ProjectName:                 authOpts.TenantName,
 			DomainID:                    authOpts.DomainID,
@@ -162,7 +170,7 @@ func (authOpts AuthOpts) ToAuthOptions() gophercloud.AuthOptions {
 
 	// Persistent service, so we need to be able to renew tokens.
 	ao.AllowReauth = true
-
+	klog.Infof("AuthOptions = %+v\n", *ao)
 	return *ao
 }
 
