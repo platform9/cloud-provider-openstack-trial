@@ -19,6 +19,7 @@ package openstack
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud/openstack"
@@ -116,10 +117,13 @@ func (os *OpenStack) ListVolumes(limit int, startingToken string) ([]volumes.Vol
 // Returns a list of Volume references with the specified name
 func (os *OpenStack) GetVolumesByName(n string) ([]volumes.Volume, error) {
 	// Init a local thread safe copy of the Cinder ServiceClient
-	blockstorageClient, err := openstack.NewBlockStorageV3(os.blockstorage.ProviderClient, os.epOpts)
+	blockstorageClient, err := openstack.NewBlockStorageV1(os.blockstorage.ProviderClient, os.epOpts)
 	if err != nil {
 		return nil, err
 	}
+	endpoint := blockstorageClient.Endpoint
+	endpoint = strings.Replace(endpoint, "v1", "v2", 1)
+	blockstorageClient.Endpoint = endpoint
 
 	// cinder filtering in volumes list is available since 3.34 microversion
 	// https://docs.openstack.org/cinder/latest/contributor/api_microversion_history.html#id32
@@ -355,10 +359,13 @@ func (os *OpenStack) ExpandVolume(volumeID string, status string, newSize int) e
 		}
 
 		// Init a local thread safe copy of the Cinder ServiceClient
-		blockstorageClient, err := openstack.NewBlockStorageV3(os.blockstorage.ProviderClient, os.epOpts)
+		blockstorageClient, err := openstack.NewBlockStorageV1(os.blockstorage.ProviderClient, os.epOpts)
 		if err != nil {
 			return err
 		}
+		endpoint := blockstorageClient.Endpoint
+		endpoint = strings.Replace(endpoint, "v1", "v2", 1)
+		blockstorageClient.Endpoint = endpoint
 
 		// cinder online resize is available since 3.42 microversion
 		// https://docs.openstack.org/cinder/latest/contributor/api_microversion_history.html#id40

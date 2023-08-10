@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -179,16 +180,20 @@ func CreateOpenStackProvider() (IOpenStack, error) {
 	}
 
 	// Init Cinder ServiceClient
-	blockstorageclient, err := openstack.NewBlockStorageV3(provider, epOpts)
+	blockstorageclient, err := openstack.NewBlockStorageV1(provider, epOpts)
 	if err != nil {
 		return nil, err
 	}
+
+	endpoint := blockstorageclient.Endpoint
+	endpoint = strings.Replace(endpoint, "v1", "v2", 1)
+	klog.Infof("Overriding endpoint %s with new endpoint %s\n", blockstorageclient.Endpoint, endpoint)
+	blockstorageclient.Endpoint = endpoint
 
 	// if no search order given, use default
 	if len(cfg.Metadata.SearchOrder) == 0 {
 		cfg.Metadata.SearchOrder = fmt.Sprintf("%s,%s", metadata.ConfigDriveID, metadata.MetadataID)
 	}
-
 	// Init OpenStack
 	OsInstance = &OpenStack{
 		compute:      computeclient,

@@ -38,7 +38,7 @@ GOFLAGS		:=
 TAGS		:=
 LDFLAGS		:= "-w -s -X 'k8s.io/component-base/version.gitVersion=$(VERSION)' -X 'k8s.io/cloud-provider-openstack/pkg/version.Version=$(VERSION)'"
 GOX_LDFLAGS	:= $(shell echo "$(LDFLAGS) -extldflags \"-static\"")
-REGISTRY	?= registry.k8s.io/provider-os
+REGISTRY	?= docker.io/xagent003
 IMAGE_OS	?= linux
 IMAGE_NAMES	?= openstack-cloud-controller-manager \
 				cinder-csi-plugin \
@@ -166,7 +166,7 @@ build-local-image-%:
 		.
 
 # Build all images locally
-build-local-images: $(addprefix build-image-,$(IMAGE_NAMES))
+build-local-images: $(addprefix build-local-image-,$(IMAGE_NAMES))
 
 # Build a single image for all architectures in ARCHS and push it to REGISTRY
 push-multiarch-image-%:

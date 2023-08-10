@@ -45,7 +45,7 @@ const (
 )
 
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
-	klog.V(4).Infof("CreateVolume: called with args %+v", protosanitizer.StripSecrets(*req))
+	klog.Infof("CreateVolume: called with args %+v", protosanitizer.StripSecrets(*req))
 
 	// Volume Name
 	volName := req.GetName()
@@ -93,10 +93,10 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		if volSizeGB != volumes[0].Size {
 			return nil, status.Error(codes.AlreadyExists, "Volume Already exists with same name and different capacity")
 		}
-		klog.V(4).Infof("Volume %s already exists in Availability Zone: %s of size %d GiB", volumes[0].ID, volumes[0].AvailabilityZone, volumes[0].Size)
+		klog.Infof("Volume %s already exists in Availability Zone: %s of size %d GiB", volumes[0].ID, volumes[0].AvailabilityZone, volumes[0].Size)
 		return getCreateVolumeResponse(&volumes[0], ignoreVolumeAZ, req.GetAccessibilityRequirements()), nil
 	} else if len(volumes) > 1 {
-		klog.V(3).Infof("found multiple existing volumes with selected name (%s) during create", volName)
+		klog.Infof("found multiple existing volumes with selected name (%s) during create", volName)
 		return nil, status.Error(codes.Internal, "Multiple volumes reported by Cinder with same name")
 
 	}
@@ -143,7 +143,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 	}
 
-	klog.V(4).Infof("CreateVolume: Successfully created volume %s in Availability Zone: %s of size %d GiB", vol.ID, vol.AvailabilityZone, vol.Size)
+	klog.Infof("CreateVolume: Successfully created volume %s in Availability Zone: %s of size %d GiB", vol.ID, vol.AvailabilityZone, vol.Size)
 
 	return getCreateVolumeResponse(vol, ignoreVolumeAZ, req.GetAccessibilityRequirements()), nil
 }
