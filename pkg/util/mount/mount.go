@@ -112,7 +112,7 @@ func probeVolume() error {
 	cmd := executor.Command("udevadm", args...)
 	_, err := cmd.CombinedOutput()
 	if err != nil {
-		klog.V(3).Infof("error running udevadm trigger %v\n", err)
+		klog.Infof("error running udevadm trigger %v\n", err)
 		return err
 	}
 	return nil
@@ -135,7 +135,7 @@ func (m *Mount) GetDevicePath(volumeID string) (string, error) {
 		// see issue https://github.com/kubernetes/cloud-provider-openstack/issues/705
 		if err := probeVolume(); err != nil {
 			// log the error, but continue. Might not happen in edge cases
-			klog.V(5).Infof("Unable to probe attached disk: %v", err)
+			klog.Infof("Unable to probe attached disk: %v", err)
 		}
 		return false, nil
 	})
@@ -167,20 +167,20 @@ func (m *Mount) getDevicePathBySerialID(volumeID string) string {
 
 	files, err := os.ReadDir("/dev/disk/by-id/")
 	if err != nil {
-		klog.V(4).Infof("ReadDir failed with error %v", err)
+		klog.Infof("ReadDir failed with error %v", err)
 	}
 
 	for _, f := range files {
 		for _, c := range candidateDeviceNodes {
 			if c == f.Name() {
-				klog.V(4).Infof("Found disk attached as %q; full devicepath: %s\n",
+				klog.Infof("Found disk attached as %q; full devicepath: %s\n",
 					f.Name(), path.Join("/dev/disk/by-id/", f.Name()))
 				return path.Join("/dev/disk/by-id/", f.Name())
 			}
 		}
 	}
 
-	klog.V(4).Infof("Failed to find device for the volumeID: %q by serial ID", volumeID)
+	klog.Infof("Failed to find device for the volumeID: %q by serial ID", volumeID)
 	return ""
 }
 
@@ -194,7 +194,7 @@ func (m *Mount) ScanForAttach(devicePath string) error {
 	for {
 		select {
 		case <-ticker.C:
-			klog.V(5).Infof("Checking Cinder disk %q is attached.", devicePath)
+			klog.Infof("Checking Cinder disk %q is attached.", devicePath)
 			if err := probeVolume(); err != nil {
 				// log the error, but continue. Might not happen in edge cases
 				klog.V(5).Infof("Unable to probe attached disk: %v", err)
@@ -204,7 +204,7 @@ func (m *Mount) ScanForAttach(devicePath string) error {
 			if exists && err == nil {
 				return nil
 			}
-			klog.V(3).Infof("Could not find attached Cinder disk %s", devicePath)
+			klog.Infof("Could not find attached Cinder disk %s", devicePath)
 		case <-timer.C:
 			return fmt.Errorf("could not find attached Cinder disk %s. Timeout waiting for mount paths to be created", devicePath)
 		}

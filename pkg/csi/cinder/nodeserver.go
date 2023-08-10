@@ -190,7 +190,7 @@ func nodePublishEphemeral(req *csi.NodePublishVolumeRequest, ns *nodeServer) (*c
 
 	m := ns.Mount
 
-	devicePath, err := getDevicePath(evol.ID, m)
+	devicePath, err := getDevicePath(evol.ID, m, ns)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Unable to find Device path for volume: %v", err))
 	}
@@ -228,7 +228,7 @@ func nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, ns *nodeServer
 	m := ns.Mount
 
 	// Do not trust the path provided by cinder, get the real path on node
-	source, err := getDevicePath(volumeID, m)
+	source, err := getDevicePath(volumeID, m, ns)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Unable to find Device path for volume: %v", err))
 	}
@@ -367,8 +367,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	}
 
 	m := ns.Mount
+
 	// Do not trust the path provided by cinder, get the real path on node
-	devicePath, err := getDevicePath(volumeID, m)
+	devicePath, err := getDevicePath(volumeID, m, ns)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Unable to find Device path for volume: %v", err))
 	}
@@ -573,22 +574,35 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	return &csi.NodeExpandVolumeResponse{}, nil
 }
 
-func getDevicePath(volumeID string, m mount.IMount) (string, error) {
+func getDevicePath(volumeID string, m mount.IMount, ns *nodeServer) (string, error) {
 	var devicePath string
-	devicePath, err := m.GetDevicePath(volumeID)
+
+	vol, err := ns.Cloud.GetVolume(volumeID)
 	if err != nil {
-		klog.Warningf("Couldn't get device path from mount: %v", err)
+		if cpoerrors.IsNotFound(err) {
+			return "", status.Error(codes.NotFound, "Volume not found")
+		}
+		return "", status.Error(codes.Internal, fmt.Sprintf("GetVolume failed with error %v", err))
 	}
 
-	if devicePath == "" {
-		// try to get from metadata service
-		klog.Info("Trying to get device path from metadata service")
-		devicePath, err = metadata.GetDevicePath(volumeID)
+	devicePath = vol.Attachments[0].Device
+
+	/*
+		devicePath, err = m.GetDevicePath(volumeID)
 		if err != nil {
-			klog.Errorf("Couldn't get device path from metadata service: %v", err)
-			return "", fmt.Errorf("couldn't get device path from metadata service: %v", err)
+			klog.Warningf("Couldn't get device path from mount: %v", err)
 		}
-	}
+
+		if devicePath == "" {
+			// try to get from metadata service
+			klog.Info("Trying to get device path from metadata service")
+			devicePath, err = metadata.GetDevicePath(volumeID)
+			if err != nil {
+				klog.Errorf("Couldn't get device path from metadata service: %v", err)
+				return "", fmt.Errorf("couldn't get device path from metadata service: %v", err)
+			}
+		}
+	*/
 
 	return devicePath, nil
 

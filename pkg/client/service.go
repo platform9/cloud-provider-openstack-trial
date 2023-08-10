@@ -42,6 +42,15 @@ func NewComputeV2(provider *gophercloud.ProviderClient, eo *gophercloud.Endpoint
 }
 
 // NewBlockStorageV3 creates a ServiceClient that may be used with the Cinder v3 API
+func NewBlockStorageV1(provider *gophercloud.ProviderClient, eo *gophercloud.EndpointOpts) (*gophercloud.ServiceClient, error) {
+	storage, err := openstack.NewBlockStorageV1(provider, *eo)
+	if err != nil {
+		return nil, fmt.Errorf("unable to find cinder v1 %s endpoint for region %s: %v", eo.Availability, eo.Region, err)
+	}
+	return storage, nil
+}
+
+// NewBlockStorageV3 creates a ServiceClient that may be used with the Cinder v3 API
 func NewBlockStorageV3(provider *gophercloud.ProviderClient, eo *gophercloud.EndpointOpts) (*gophercloud.ServiceClient, error) {
 	storage, err := openstack.NewBlockStorageV3(provider, *eo)
 	if err != nil {
