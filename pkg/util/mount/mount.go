@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -112,7 +113,7 @@ func probeVolume() error {
 	cmd := executor.Command("udevadm", args...)
 	_, err := cmd.CombinedOutput()
 	if err != nil {
-		klog.V(3).Infof("error running udevadm trigger %v\n", err)
+		klog.Infof("error running udevadm trigger %v\n", err)
 		return err
 	}
 	return nil
@@ -135,7 +136,7 @@ func (m *Mount) GetDevicePath(volumeID string) (string, error) {
 		// see issue https://github.com/kubernetes/cloud-provider-openstack/issues/705
 		if err := probeVolume(); err != nil {
 			// log the error, but continue. Might not happen in edge cases
-			klog.V(5).Infof("Unable to probe attached disk: %v", err)
+			klog.Infof("Unable to probe attached disk: %v", err)
 		}
 		return false, nil
 	})
@@ -167,20 +168,20 @@ func (m *Mount) getDevicePathBySerialID(volumeID string) string {
 
 	files, err := os.ReadDir("/dev/disk/by-id/")
 	if err != nil {
-		klog.V(4).Infof("ReadDir failed with error %v", err)
+		klog.Infof("ReadDir failed with error %v", err)
 	}
 
 	for _, f := range files {
 		for _, c := range candidateDeviceNodes {
 			if c == f.Name() {
-				klog.V(4).Infof("Found disk attached as %q; full devicepath: %s\n",
+				klog.Infof("Found disk attached as %q; full devicepath: %s\n",
 					f.Name(), path.Join("/dev/disk/by-id/", f.Name()))
 				return path.Join("/dev/disk/by-id/", f.Name())
 			}
 		}
 	}
 
-	klog.V(4).Infof("Failed to find device for the volumeID: %q by serial ID", volumeID)
+	klog.Infof("Failed to find device for the volumeID: %q by serial ID", volumeID)
 	return ""
 }
 
@@ -194,7 +195,7 @@ func (m *Mount) ScanForAttach(devicePath string) error {
 	for {
 		select {
 		case <-ticker.C:
-			klog.V(5).Infof("Checking Cinder disk %q is attached.", devicePath)
+			klog.Infof("Checking Cinder disk %q is attached.", devicePath)
 			if err := probeVolume(); err != nil {
 				// log the error, but continue. Might not happen in edge cases
 				klog.V(5).Infof("Unable to probe attached disk: %v", err)
@@ -204,7 +205,7 @@ func (m *Mount) ScanForAttach(devicePath string) error {
 			if exists && err == nil {
 				return nil
 			}
-			klog.V(3).Infof("Could not find attached Cinder disk %s", devicePath)
+			klog.Infof("Could not find attached Cinder disk %s", devicePath)
 		case <-timer.C:
 			return fmt.Errorf("could not find attached Cinder disk %s. Timeout waiting for mount paths to be created", devicePath)
 		}
@@ -294,4 +295,56 @@ func (m *Mount) GetDeviceStats(path string) (*DeviceStats, error) {
 		TotalInodes:     int64(statfs.Files),
 		UsedInodes:      int64(statfs.Files) - int64(statfs.Ffree),
 	}, nil
+}
+
+func GetDevicePathForOnMetal(volumeID string) (string, error) {
+	backoff := wait.Backoff{
+		Duration: operationFinishInitDelay,
+		Factor:   operationFinishFactor,
+		Steps:    operationFinishSteps,
+	}
+
+	var devicePath string
+	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
+		devicePath = getDevicePathForOnMetalByVolumeID(volumeID)
+		if devicePath != "" {
+			return true, nil
+		}
+		// see issue https://github.com/kubernetes/cloud-provider-openstack/issues/705
+		if err := probeVolume(); err != nil {
+			// log the error, but continue. Might not happen in edge cases
+			klog.Infof("Unable to probe attached disk: %v", err)
+		}
+		return false, nil
+	})
+
+	if wait.Interrupted(err) {
+		return "", fmt.Errorf("failed to find device for the volumeID: %q within the alloted time: %v", volumeID, err)
+	} else if devicePath == "" {
+		return "", fmt.Errorf("failed to find devicePath in /dev/disk/by-path for volume: %q", volumeID)
+	}
+	return devicePath, nil
+}
+
+func getDevicePathForOnMetalByVolumeID(volumeID string) string {
+	files, err := os.ReadDir("/dev/disk/by-path/")
+	if err != nil {
+		return ""
+	}
+	for _, file := range files {
+		if file.Type()&os.ModeSymlink == os.ModeSymlink {
+			symlink := filepath.Join("/dev/disk/by-path", file.Name())
+			realPath, err := filepath.EvalSymlinks(symlink)
+			if err != nil {
+				continue
+			}
+			if strings.Contains(file.Name(), volumeID) {
+				klog.Infof("volumeID %s matches: %s", volumeID, symlink)
+				return realPath
+			}
+
+		}
+	}
+
+	return ""
 }
