@@ -40,6 +40,8 @@ import (
 	mountutil "k8s.io/mount-utils"
 )
 
+const ONMETAL_FLAVOR_PREFIX = "onmetal"
+
 type nodeServer struct {
 	Driver   *Driver
 	Mount    mount.IMount
@@ -48,7 +50,7 @@ type nodeServer struct {
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-	klog.V(4).Infof("NodePublishVolume: called with args %+v", protosanitizer.StripSecrets(*req))
+	klog.Infof("NodePublishVolume: called with args %+v", protosanitizer.StripSecrets(*req))
 
 	volumeID := req.GetVolumeId()
 	source := req.GetStagingTargetPath()
@@ -165,7 +167,7 @@ func nodePublishEphemeral(req *csi.NodePublishVolumeRequest, ns *nodeServer) (*c
 		}
 	}
 
-	klog.V(4).Infof("Ephemeral Volume %s is created", evol.ID)
+	klog.Infof("Ephemeral Volume %s is created", evol.ID)
 
 	// attach volume
 	// for attach volume we need to have information about node.
@@ -219,7 +221,7 @@ func nodePublishEphemeral(req *csi.NodePublishVolumeRequest, ns *nodeServer) (*c
 }
 
 func nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, ns *nodeServer, mountOptions []string) (*csi.NodePublishVolumeResponse, error) {
-	klog.V(4).Infof("NodePublishVolumeBlock: called with args %+v", protosanitizer.StripSecrets(*req))
+	klog.Infof("NodePublishVolumeBlock: called with args %+v", protosanitizer.StripSecrets(*req))
 
 	volumeID := req.GetVolumeId()
 	targetPath := req.GetTargetPath()
@@ -341,7 +343,7 @@ func nodeUnpublishEphemeral(req *csi.NodeUnpublishVolumeRequest, ns *nodeServer,
 }
 
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
-	klog.V(4).Infof("NodeStageVolume: called with args %+v", protosanitizer.StripSecrets(*req))
+	klog.Infof("NodeStageVolume: called with args %+v", protosanitizer.StripSecrets(*req))
 
 	stagingTarget := req.GetStagingTargetPath()
 	volumeCapability := req.GetVolumeCapability()
@@ -583,6 +585,31 @@ func getDevicePath(volumeID string, m mount.IMount, ns *nodeServer) (string, err
 			return "", status.Error(codes.NotFound, "Volume not found")
 		}
 		return "", status.Error(codes.Internal, fmt.Sprintf("GetVolume failed with error %v", err))
+	}
+
+	instanceID, err := ns.Metadata.GetInstanceID()
+	if err != nil {
+		return "", status.Error(codes.Internal, fmt.Sprintf("[getDevicePath]: failed to get instance ID from metadata %v", err))
+	}
+
+	server, err := ns.Cloud.GetInstanceByID(instanceID)
+	if err != nil {
+		if cpoerrors.IsNotFound(err) {
+			return "", status.Error(codes.NotFound, fmt.Sprintf("Instance %s not found for volume %s", instanceID, volumeID))
+		}
+		return "", fmt.Errorf("Failed to fetch instanceID %s: %v", instanceID, err)
+	}
+
+	flavorID, ok := server.Flavor["id"].(string)
+	if !ok {
+		return "", fmt.Errorf("Failed to get flavorID from server: %+v", server)
+	}
+	klog.Infof("ARJUN: got flavorID: %s", string(flavorID))
+
+	isOnMetal := strings.HasPrefix(flavorID, ONMETAL_FLAVOR_PREFIX)
+	klog.Infof("ARJUN: isOnMetal = %v", isOnMetal)
+	if isOnMetal {
+		return "", fmt.Errorf("ARJUN: skipping OnMetal device")
 	}
 
 	devicePath = vol.Attachments[0].Device

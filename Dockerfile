@@ -114,6 +114,8 @@ RUN clean-install btrfs-progs e2fsprogs mount udev xfsprogs
 COPY --from=builder /build/cinder-csi-plugin /bin/cinder-csi-plugin
 COPY --from=certs /etc/ssl/certs /etc/ssl/certs
 
+COPY scripts/iscsi.sh /etc/iscsi/iscsi.sh
+
 LABEL name="cinder-csi-plugin" \
       license="Apache Version 2.0" \
       maintainers="Kubernetes Authors" \
