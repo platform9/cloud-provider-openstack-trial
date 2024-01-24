@@ -17,8 +17,10 @@ limitations under the License.
 package cinder
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -40,6 +42,8 @@ import (
 	mountutil "k8s.io/mount-utils"
 )
 
+const ONMETAL_FLAVOR_PREFIX = "onmetal"
+
 type nodeServer struct {
 	Driver   *Driver
 	Mount    mount.IMount
@@ -48,7 +52,7 @@ type nodeServer struct {
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
-	klog.V(4).Infof("NodePublishVolume: called with args %+v", protosanitizer.StripSecrets(*req))
+	klog.Infof("NodePublishVolume: called with args %+v", protosanitizer.StripSecrets(*req))
 
 	volumeID := req.GetVolumeId()
 	source := req.GetStagingTargetPath()
@@ -165,7 +169,7 @@ func nodePublishEphemeral(req *csi.NodePublishVolumeRequest, ns *nodeServer) (*c
 		}
 	}
 
-	klog.V(4).Infof("Ephemeral Volume %s is created", evol.ID)
+	klog.Infof("Ephemeral Volume %s is created", evol.ID)
 
 	// attach volume
 	// for attach volume we need to have information about node.
@@ -190,7 +194,7 @@ func nodePublishEphemeral(req *csi.NodePublishVolumeRequest, ns *nodeServer) (*c
 
 	m := ns.Mount
 
-	devicePath, err := getDevicePath(evol.ID, m)
+	devicePath, err := getDevicePath(evol.ID, m, ns)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Unable to find Device path for volume: %v", err))
 	}
@@ -219,7 +223,7 @@ func nodePublishEphemeral(req *csi.NodePublishVolumeRequest, ns *nodeServer) (*c
 }
 
 func nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, ns *nodeServer, mountOptions []string) (*csi.NodePublishVolumeResponse, error) {
-	klog.V(4).Infof("NodePublishVolumeBlock: called with args %+v", protosanitizer.StripSecrets(*req))
+	klog.Infof("NodePublishVolumeBlock: called with args %+v", protosanitizer.StripSecrets(*req))
 
 	volumeID := req.GetVolumeId()
 	targetPath := req.GetTargetPath()
@@ -228,7 +232,7 @@ func nodePublishVolumeForBlock(req *csi.NodePublishVolumeRequest, ns *nodeServer
 	m := ns.Mount
 
 	// Do not trust the path provided by cinder, get the real path on node
-	source, err := getDevicePath(volumeID, m)
+	source, err := getDevicePath(volumeID, m, ns)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Unable to find Device path for volume: %v", err))
 	}
@@ -301,6 +305,36 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		return nil, status.Errorf(codes.Internal, "Unmount of targetpath %s failed with error %v", targetPath, err)
 	}
 
+	instanceID, err := ns.Metadata.GetInstanceID()
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("[getDevicePath]: failed to get instance ID from metadata %v", err))
+	}
+
+	server, err := ns.Cloud.GetInstanceByID(instanceID)
+	if err != nil {
+		if cpoerrors.IsNotFound(err) {
+			return nil, status.Error(codes.NotFound, fmt.Sprintf("Instance %s not found for volume %s", instanceID, volumeID))
+		}
+		return nil, fmt.Errorf("Failed to fetch instanceID %s: %v", instanceID, err)
+	}
+
+	flavorID, ok := server.Flavor["id"].(string)
+	if !ok {
+		return nil, fmt.Errorf("Failed to get flavorID from server: %+v", server)
+	}
+
+	isOnMetal := strings.HasPrefix(flavorID, ONMETAL_FLAVOR_PREFIX)
+	if isOnMetal {
+		targetIQN, targetPortal, _, err := extractVolumeMetadata(server.Metadata, volumeID)
+		klog.Infof("Deleting Target IQN:%s Target Portal:%s", targetIQN, targetPortal)
+		cmd := exec.Command("/iscsi_detach.sh", targetIQN, targetPortal)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("Failed to exec cmd iscsi_detach.sh: %+v", err)
+		}
+		klog.Infof("iscsi_detach.sh result: %s", string(output))
+	}
+
 	if ephemeralVolume {
 		return nodeUnpublishEphemeral(req, ns, vol)
 	}
@@ -341,7 +375,7 @@ func nodeUnpublishEphemeral(req *csi.NodeUnpublishVolumeRequest, ns *nodeServer,
 }
 
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
-	klog.V(4).Infof("NodeStageVolume: called with args %+v", protosanitizer.StripSecrets(*req))
+	klog.Infof("NodeStageVolume: called with args %+v", protosanitizer.StripSecrets(*req))
 
 	stagingTarget := req.GetStagingTargetPath()
 	volumeCapability := req.GetVolumeCapability()
@@ -367,8 +401,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	}
 
 	m := ns.Mount
+
 	// Do not trust the path provided by cinder, get the real path on node
-	devicePath, err := getDevicePath(volumeID, m)
+	devicePath, err := getDevicePath(volumeID, m, ns)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Unable to find Device path for volume: %v", err))
 	}
@@ -573,25 +608,99 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
 	return &csi.NodeExpandVolumeResponse{}, nil
 }
 
-func getDevicePath(volumeID string, m mount.IMount) (string, error) {
+func getDevicePath(volumeID string, m mount.IMount, ns *nodeServer) (string, error) {
 	var devicePath string
-	devicePath, err := m.GetDevicePath(volumeID)
+
+	vol, err := ns.Cloud.GetVolume(volumeID)
 	if err != nil {
-		klog.Warningf("Couldn't get device path from mount: %v", err)
+		if cpoerrors.IsNotFound(err) {
+			return "", status.Error(codes.NotFound, "Volume not found")
+		}
+		return "", status.Error(codes.Internal, fmt.Sprintf("GetVolume failed with error %v", err))
 	}
 
-	if devicePath == "" {
-		// try to get from metadata service
-		klog.Info("Trying to get device path from metadata service")
-		devicePath, err = metadata.GetDevicePath(volumeID)
-		if err != nil {
-			klog.Errorf("Couldn't get device path from metadata service: %v", err)
-			return "", fmt.Errorf("couldn't get device path from metadata service: %v", err)
-		}
+	instanceID, err := ns.Metadata.GetInstanceID()
+	if err != nil {
+		return "", status.Error(codes.Internal, fmt.Sprintf("[getDevicePath]: failed to get instance ID from metadata %v", err))
 	}
+
+	server, err := ns.Cloud.GetInstanceByID(instanceID)
+	if err != nil {
+		if cpoerrors.IsNotFound(err) {
+			return "", status.Error(codes.NotFound, fmt.Sprintf("Instance %s not found for volume %s", instanceID, volumeID))
+		}
+		return "", fmt.Errorf("Failed to fetch instanceID %s: %v", instanceID, err)
+	}
+
+	flavorID, ok := server.Flavor["id"].(string)
+	if !ok {
+		return "", fmt.Errorf("Failed to get flavorID from server: %+v", server)
+	}
+
+	isOnMetal := strings.HasPrefix(flavorID, ONMETAL_FLAVOR_PREFIX)
+	if isOnMetal {
+		targetIQN, targetPortal, initiatorName, err := extractVolumeMetadata(server.Metadata, volumeID)
+		klog.Infof("Target IQN:%s Target Portal:%s Initiator:%s", targetIQN, targetPortal, initiatorName)
+		cmd := exec.Command("/iscsi_attach.sh", targetIQN, targetPortal, initiatorName)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("Failed to exec cmd iscsi.sh: %+v", err)
+		}
+		klog.Infof("iscsi_attach.sh result: %s", string(output))
+
+		devicePath, err = mount.GetDevicePathForOnMetal(volumeID)
+		if err != nil {
+			return "", fmt.Errorf("Failed to get devicePath: %v", err)
+		}
+	} else {
+		devicePath = vol.Attachments[0].Device
+	}
+
+	// Below does not with for OSPC as they don't have metadata service and device paths
+	// are not populated by udev scripts. Additionally behavior is different for VMs vs OnMetal
+	/*
+		devicePath, err = m.GetDevicePath(volumeID)
+		if err != nil {
+			klog.Warningf("Couldn't get device path from mount: %v", err)
+		}
+
+		if devicePath == "" {
+			// try to get from metadata service
+			klog.Info("Trying to get device path from metadata service")
+			devicePath, err = metadata.GetDevicePath(volumeID)
+			if err != nil {
+				klog.Errorf("Couldn't get device path from metadata service: %v", err)
+				return "", fmt.Errorf("couldn't get device path from metadata service: %v", err)
+			}
+		}
+	*/
 
 	return devicePath, nil
 
+}
+
+func extractVolumeMetadata(metadata map[string]string, volumeID string) (string, string, string, error) {
+	volumeKey := fmt.Sprintf("volumes_%s", volumeID)
+	volumeMetadataJSON, found := metadata[volumeKey]
+	if !found {
+		return "", "", "", fmt.Errorf("Failed to find metadata for volume %s", volumeID)
+	}
+
+	volumeMetadata := make(map[string]string)
+	err := json.Unmarshal([]byte(volumeMetadataJSON), &volumeMetadata)
+	if err != nil {
+		return "", "", "", fmt.Errorf("Failed to unmarshal volume %s metadata: %v", volumeID, err)
+	}
+
+	targetIQN, foundIQN := volumeMetadata["target_iqn"]
+	targetPortal, foundPortal := volumeMetadata["target_portal"]
+	initiatorName, foundInitiator := volumeMetadata["initiator_name"]
+
+	if !foundIQN || !foundPortal || !foundInitiator {
+		return "", "", "", fmt.Errorf("Missing metadata for volume %s: %+v", volumeID, volumeMetadata)
+	}
+
+	return targetIQN, targetPortal, initiatorName, nil
 }
 
 func collectMountOptions(fsType string, mntFlags []string) []string {

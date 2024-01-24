@@ -77,6 +77,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2 // indirect
+	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -141,7 +142,7 @@ require (
 	k8s.io/component-helpers v0.27.1 // indirect
 	k8s.io/controller-manager v0.27.1 // indirect
 	k8s.io/csi-translation-lib v0.27.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20230327201221-f5883ff37f0c // indirect
+	k8s.io/kube-openapi v0.0.0-20230501164219-8b0f38b5fd1f // indirect
 	k8s.io/kubectl v0.27.1 // indirect
 	k8s.io/kubelet v0.0.0 // indirect
 	k8s.io/pod-security-admission v0.27.1 // indirect
@@ -159,7 +160,6 @@ replace (
 	k8s.io/apiserver => k8s.io/apiserver v0.27.1
 	k8s.io/cli-runtime => k8s.io/cli-runtime v0.27.1
 	k8s.io/client-go => k8s.io/client-go v0.27.1
-	k8s.io/cloud-provider => k8s.io/cloud-provider v0.27.1
 	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.27.1
 	k8s.io/code-generator => k8s.io/code-generator v0.27.1
 	k8s.io/component-base => k8s.io/component-base v0.27.1
@@ -181,4 +181,10 @@ replace (
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.27.1
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.27.1
 	k8s.io/sample-controller => k8s.io/sample-controller v0.27.1
+)
+
+replace (
+	github.com/gophercloud/gophercloud => github.com/platform9/gophercloud v0.0.0-20230725192123-f5bf8afaa214
+	github.com/gophercloud/utils => github.com/platform9/gophercloud-utils v0.0.0-20230725192416-bb0e57cadb96
+	k8s.io/cloud-provider => github.com/platform9/k8s-cloud-provider v0.0.0-20230630054839-fab92f8cbf80
 )

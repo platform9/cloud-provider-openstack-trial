@@ -19,6 +19,7 @@ package register
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	gopenstack "github.com/gophercloud/gophercloud/openstack"
@@ -65,10 +66,14 @@ func registerOpenStack(cfg config.Config, kubeClient kubernetes.Interface) (clou
 
 	// get cinder service client
 	var cinderClient *gophercloud.ServiceClient
-	cinderClient, err = gopenstack.NewBlockStorageV3(client, eoOpts)
+	cinderClient, err = gopenstack.NewBlockStorageV1(client, eoOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Cinder service endpoint in the region %s: %v", cfg.OpenStack.Region, err)
 	}
+
+	endpoint := cinderClient.Endpoint
+	endpoint = strings.Replace(endpoint, "v1", "v2", 1)
+	cinderClient.Endpoint = endpoint
 
 	p := openstack.CloudProvider{
 		KubeClient: kubeClient,

@@ -109,10 +109,14 @@ CMD ["sh", "-c", "/bin/barbican-kms-plugin --socketpath ${socketpath} --cloud-co
 FROM --platform=${TARGETPLATFORM} ${DEBIAN_IMAGE} as cinder-csi-plugin
 
 # Install e4fsprogs for format
-RUN clean-install btrfs-progs e2fsprogs mount udev xfsprogs
+RUN clean-install btrfs-progs e2fsprogs mount udev xfsprogs bash vim
 
 COPY --from=builder /build/cinder-csi-plugin /bin/cinder-csi-plugin
 COPY --from=certs /etc/ssl/certs /etc/ssl/certs
+
+COPY scripts/iscsi_attach.sh /iscsi_attach.sh
+COPY scripts/iscsi_detach.sh /iscsi_detach.sh
+COPY scripts/entrypoint.sh /entrypoint.sh
 
 LABEL name="cinder-csi-plugin" \
       license="Apache Version 2.0" \
@@ -122,7 +126,7 @@ LABEL name="cinder-csi-plugin" \
       summary="Cinder CSI Plugin" \
       help="none"
 
-CMD ["/bin/cinder-csi-plugin"]
+ENTRYPOINT ["/entrypoint.sh"]
 
 ##
 ## k8s-keystone-auth
