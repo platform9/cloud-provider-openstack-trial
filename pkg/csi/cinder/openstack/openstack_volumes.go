@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/cloud-provider-openstack/pkg/metrics"
 	cpoerrors "k8s.io/cloud-provider-openstack/pkg/util/errors"
+	klog "k8s.io/klog/v2"
 )
 
 const (
