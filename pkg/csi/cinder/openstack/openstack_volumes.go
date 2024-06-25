@@ -30,8 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/cloud-provider-openstack/pkg/metrics"
 	cpoerrors "k8s.io/cloud-provider-openstack/pkg/util/errors"
-
-	"k8s.io/klog/v2"
 )
 
 const (
@@ -40,12 +38,12 @@ const (
 	operationFinishInitDelay = 1 * time.Second
 	operationFinishFactor    = 1.1
 	operationFinishSteps     = 10
-	diskAttachInitDelay      = 1 * time.Second
+	diskAttachInitDelay      = 6 * time.Second
 	diskAttachFactor         = 1.2
 	diskAttachSteps          = 15
-	diskDetachInitDelay      = 1 * time.Second
+	diskDetachInitDelay      = 6 * time.Second
 	diskDetachFactor         = 1.2
-	diskDetachSteps          = 13
+	diskDetachSteps          = 15
 	volumeDescription        = "Created by OpenStack Cinder CSI driver"
 )
 
