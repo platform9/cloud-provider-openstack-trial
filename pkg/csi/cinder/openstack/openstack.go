@@ -241,7 +241,7 @@ auth-url=https://identity.api.rackspacecloud.com/v2.0/
 username=<redacted>
 api-key=<redacted>
 region="%s"
-tenant-id=1339069
+tenant-id=<redacted>
 
 [LoadBalancer]
 
