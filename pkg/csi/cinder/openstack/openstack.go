@@ -152,12 +152,10 @@ func InitOpenStackProvider(cfgFiles []string, regionName string, httpEndpoint st
 		klog.Infof("Using internal cloud config file: %s", cfgFiles)
 		if err := createCfgFile(configFiles[0], regionName); err != nil {
 			klog.Fatalf("Failed to create cloud config file: %v", err)
-			return
 		}
-	} else {
-		klog.Infof("Using provided cloud config file: %s", cfgFiles)
+		return
 	}
-
+	klog.Infof("Using provided cloud config files: %s", cfgFiles)
 	configFiles = cfgFiles
 	klog.V(2).Infof("InitOpenStackProvider configFiles: %s", configFiles)
 }

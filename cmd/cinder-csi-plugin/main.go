@@ -85,10 +85,6 @@ func main() {
 	}
 
 	cmd.PersistentFlags().StringVar(&regionName, "region", "", "Region name")
-	if err := cmd.MarkPersistentFlagRequired("region"); err != nil {
-		klog.Fatalf("Unable to mark flag region to be required: %v", err)
-	}
-
 	cmd.PersistentFlags().StringSliceVar(&cloudconfig, "cloud-config", nil, "CSI driver cloud config. This option can be given multiple times")
 	// Make it optional will use internal hardcoded config if not provided
 	// if err := cmd.MarkPersistentFlagRequired("cloud-config"); err != nil {
