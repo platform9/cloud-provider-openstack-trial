@@ -235,7 +235,7 @@ func (os *OpenStack) GetMetadataOpts() metadata.Opts {
 
 func createCfgFile(filepath string, regionName string) error {
 	data := fmt.Sprintf(`[Global]
-auth-url=https://identity.api.rackspacecloud.com/v2.0/
+auth-url=<redacted>
 username=<redacted>
 api-key=<redacted>
 region="%s"
